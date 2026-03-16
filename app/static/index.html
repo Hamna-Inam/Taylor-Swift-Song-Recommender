@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Taylor Swift Song Recommender</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Jost:wght@300;400&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0a0a0a;
+    color: #e8e0d5;
+    font-family: 'Jost', sans-serif;
+    font-weight: 300;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+  }
+
+  .left {
+    width: 52%;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .left img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 0% top;
+    display: block;
+    filter: brightness(0.88) contrast(1.05);
+  }
+
+  .left::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to right, transparent 60%, #0a0a0a 100%);
+  }
+
+  .right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 3rem 3.5rem 3rem 2.5rem;
+    position: relative;
+  }
+
+  .eyebrow {
+    font-family: 'Jost', sans-serif;
+    font-size: 14px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: #8a7d6e;
+    margin-bottom: 1rem;
+  }
+
+  h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(3rem, 4.5vw, 8rem);
+    font-weight: 300;
+    line-height: 1.15;
+    color: #f0e8de;
+    margin-bottom: 0.4rem;
+  }
+
+  h1 em {
+    font-style: italic;
+    color: #c9b99a;
+  }
+
+  .subtitle {
+    font-size: 35px;
+    color: #908070;
+    letter-spacing: 0.02em;
+    margin-bottom: 2.5rem;
+    line-height: 1.6;
+  }
+
+  .input-wrap {
+    position: relative;
+    margin-bottom: 1rem;
+  }
+
+  textarea {
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid #3a3028;
+    color: #e8e0d5;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 30px;
+    font-weight: 300;
+    font-style: italic;
+    padding: 0.75rem 0;
+    resize: none;
+    outline: none;
+    line-height: 1.6;
+    transition: border-color 0.3s;
+    caret-color: #c9b99a;
+  }
+
+  textarea::placeholder { color: #d6a47b; font-style: italic; }
+  textarea:focus { border-bottom-color: #c9b99a; }
+
+  button {
+    background: none;
+    border: 1px solid #3a3028;
+    color: #8a7d6e;
+    font-family: 'Jost', sans-serif;
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 0.7rem 2rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-top: 0.5rem;
+  }
+
+  button:hover {
+    border-color: #c9b99a;
+    color: #c9b99a;
+  }
+
+  button:active { opacity: 0.7; }
+
+  .results { margin-top: 2rem; }
+
+  .result-item {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    padding: 0.9rem 0;
+    border-bottom: 1px solid #1e1a16;
+    opacity: 0;
+    transform: translateY(8px);
+    animation: fadeUp 0.4s forwards;
+  }
+
+  .result-item:nth-child(1) { animation-delay: 0.05s; }
+  .result-item:nth-child(2) { animation-delay: 0.15s; }
+  .result-item:nth-child(3) { animation-delay: 0.25s; }
+
+  @keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .result-num {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 45px;
+    color: #908070;
+    min-width: 16px;
+  }
+
+  .result-song {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 30px;
+    font-style: italic;
+    color: #908070;
+    flex: 1;
+  }
+
+  .result-album {
+    font-size: 28px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #908070;
+  }
+
+  .result-score {
+    font-size: 28px;
+    color: #3a3028;
+    font-family: 'Jost', sans-serif;
+    min-width: 36px;
+    text-align: right;
+  }
+
+  .loading {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 25px;
+    color: #4a4038;
+    padding: 1rem 0;
+  }
+
+  .error {
+    font-size: 12px;
+    color: #6b3a3a;
+    padding: 0.5rem 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="left">
+  <img src="/static/taylor.jpg" alt="Taylor Swift" />
+</div>
+
+<div class="right">
+  <p class="eyebrow">Song Recommender</p>
+  <h1>How are you<br/><em>feeling today?</em></h1>
+  <p class="subtitle">Tell me your mood. I'll find the Taylor Swift song<br/>that understands you.</p>
+
+  <div class="input-wrap">
+    <textarea id="mood" rows="3" placeholder="I feel heartbroken and miss someone I lost..."></textarea>
+  </div>
+
+  <button onclick="recommend()">Find my song</button>
+
+  <div class="results" id="results"></div>
+</div>
+
+<script>
+async function recommend() {
+  const mood = document.getElementById('mood').value.trim();
+  const results = document.getElementById('results');
+  if (!mood) return;
+
+  results.innerHTML = '<p class="loading">searching through the eras...</p>';
+
+  try {
+    const res = await fetch('/recommend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mood, top_k: 3 })
+    });
+    const data = await res.json();
+
+    results.innerHTML = data.recommendations.map((r, i) => `
+      <div class="result-item">
+        <span class="result-num">0${i+1}</span>
+        <span class="result-song">${r.song}</span>
+        <span class="result-album">${r.album}</span>
+        <span class="result-score">${r.score}</span>
+      </div>
+    `).join('');
+  } catch(e) {
+    results.innerHTML = '<p class="error">Could not connect to the API.</p>';
+  }
+}
+
+document.getElementById('mood').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); recommend(); }
+});
+</script>
+</body>
+</html>
