@@ -1,1 +1,6 @@
-/*.xlsx
+*.xlsx
+*.index
+__pycache__/
+.env
+data/
+*.pem

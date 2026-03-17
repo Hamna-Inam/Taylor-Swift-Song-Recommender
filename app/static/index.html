@@ -227,7 +227,7 @@ async function recommend() {
     const res = await fetch('/recommend', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mood, top_k: 3 })
+      body: JSON.stringify({ mood, top_k: 1 })
     });
     const data = await res.json();
 

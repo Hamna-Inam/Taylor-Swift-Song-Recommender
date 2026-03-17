@@ -4,3 +4,5 @@ __pycache__/
 .aws/
 *.ipynb
 .git/
+~/.cache/huggingface/
+.cache/

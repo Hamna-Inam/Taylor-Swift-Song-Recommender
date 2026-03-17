@@ -1,3 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
 fastapi
 uvicorn
 pandas
@@ -6,3 +8,4 @@ faiss-cpu
 sentence-transformers
 openpyxl
 boto3
+python-multipart
