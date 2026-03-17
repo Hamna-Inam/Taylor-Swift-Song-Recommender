@@ -4,20 +4,19 @@ A mood-based song recommender that takes how you're feeling and finds the Taylor
 
 <img width="1203" height="672" alt="image" src="https://github.com/user-attachments/assets/3fe860ff-f68d-4743-92d2-d8a9a290d3c0" />
 
-
-
 ---
 
 ## How It Works
 
 You describe your mood in plain text. The app finds the most emotionally similar Taylor Swift song from a dataset of 147 songs across all her albums.
-
 ```
 "I feel heartbroken and miss someone I lost"
         ↓
-   Qwen3-Embedding
+   all-MiniLM-L6-v2 (bi-encoder)
         ↓
-   FAISS vector search
+   semantic search → top 10 candidates
+        ↓
+   cross-encoder rerank
         ↓
    my tears ricochet — folklore
 ```
@@ -28,31 +27,35 @@ You describe your mood in plain text. The app finds the most emotionally similar
 
 The interesting challenge here is the **domain gap** — Taylor Swift's lyrics are poetic, metaphorical, and narrative. Standard sentence embedding models struggle to match a plain mood description like *"I'm angry and betrayed"* against lyrics like *"Karma is the thunder rattling your cage."*
 
-The solution was a two-stage pipeline:
+### Bridging the Domain Gap
 
-**Stage 1 — Summarization**
-Each song's lyrics are passed through `microsoft/Phi-3-mini-4k-instruct`, a small LLM that generates a 2-3 sentence description of the song's situation and emotional tone. For example:
+Rather than embedding raw lyrics, Gemini was used to generate two structured fields for all 147 songs:
+- **Thematic Logic** — the "why" behind the song's emotional narrative
+- **User Mood** — a first-person description of how someone feeling this song might describe themselves
 
-> *"Back to December is a breakup song where the narrator regrets ending a relationship, missing specific details like his tan skin and kind eyes. The emotions expressed include sadness, regret, longing, and heartbreak."*
+These are concatenated and used as the text to embed, giving the model plain descriptive language to work with instead of lyrical metaphors.
 
-This bridges the domain gap — the summary is in plain descriptive language, just like a user's mood input.
+### What I Also Tried: Summarization-Augmented Retrieval
 
-**Stage 2 — Semantic Search**
-Song summaries are embedded using `Qwen/Qwen3-Embedding` and stored in a FAISS index. At query time, the user's mood is embedded with the same model and cosine similarity retrieves the closest songs.
+An earlier version passed each song's lyrics through `microsoft/Phi-3-mini-4k-instruct` to generate 2-3 sentence emotional summaries. While this improved results over raw lyrics, it added significant complexity (Kaggle GPU for batch inference, storing generated summaries) with marginal gains over the Gemini-generated structured fields approach. The structured fields turned out to be a cleaner and more reliable signal.
+
+### Search Pipeline
+
+**Stage 1 — Bi-Encoder Retrieval**
+Song mood fields are embedded using `all-MiniLM-L6-v2`. At query time, the user's mood is embedded with the same model and cosine similarity retrieves the top 10 candidates.
+
+**Stage 2 — Cross-Encoder Reranking**
+`cross-encoder/ms-marco-MiniLM-L-6-v2` reranks the 10 candidates by jointly encoding the query and each candidate together, producing a more precise final ranking.
 
 ### Model Experiments
 
-Several embedding models were tested before settling on Qwen3:
-
 | Model | Notes |
 |---|---|
-| `all-MiniLM-L6-v2` | Too generic, poor on emotional queries |
+| `all-MiniLM-L6-v2` | Fast, good bi-encoder baseline — current choice |
 | `multi-qa-mpnet-base-dot-v1` | Better asymmetric search, decent results |
-| `all-roberta-large-v1` | Larger but no improvement |
+| `all-roberta-large-v1` | Larger but no meaningful improvement |
 | `sentence-t5-large` | High scores but poor differentiation |
-| `Qwen/Qwen3-Embedding` | Best results across all test queries |
-
-Without the Phi-3 summarization step, even the best embedding model struggled with lyrical language. With summaries, results improved significantly.
+| `Qwen/Qwen3-Embedding` | Best standalone results but too heavy for deployment |
 
 ---
 
@@ -60,44 +63,42 @@ Without the Phi-3 summarization step, even the best embedding model struggled wi
 
 | Component | Tool |
 |---|---|
-| Summarization | Phi-3-mini-4k-instruct (Kaggle GPU) |
-| Embeddings | Qwen3-Embedding |
-| Vector Search | FAISS |
+| Field Generation | Gemini |
+| Bi-Encoder | all-MiniLM-L6-v2 |
+| Cross-Encoder | ms-marco-MiniLM-L-6-v2 |
 | API | FastAPI |
 | Frontend | Vanilla HTML/CSS/JS |
-| Storage | AWS S3 (FAISS index + dataset) |
+| Storage | AWS S3 (swift_data.json) |
 | Deployment | AWS EC2 (Docker container) |
 | Container Registry | GitHub Container Registry (GHCR) |
 
 ---
 
 ## Architecture
-
 ```
 User (Browser)
     ↓
 FastAPI (EC2, Docker)
     ↓ on startup
-    ├── downloads FAISS index from S3
-    └── loads Qwen3-Embedding from HuggingFace
+    ├── downloads swift_data.json from S3
+    └── encodes all song mood fields with all-MiniLM-L6-v2
 
 At query time:
-    User mood → embed → FAISS search → top 3 songs
+    User mood → bi-encoder → top 10 candidates → cross-encoder rerank → top result
 ```
 
-The app is fully merged — embedding model, vector search, and API all run in one process on a single EC2 instance. This is appropriate at this scale since Qwen3-Embedding runs efficiently on CPU.
+The app is fully self-contained — data loading, encoding, and API all run in one process on a single EC2 instance.
 
 ---
 
 ## Running Locally
-
 ```bash
 git clone https://github.com/Hamna-Inam/taylor-recommender.git
 cd taylor-recommender
 pip install -r requirements.txt
 ```
 
-Set your AWS credentials (needed to download the FAISS index from S3):
+Set your AWS credentials (needed to download swift_data.json from S3):
 ```bash
 export AWS_ACCESS_KEY_ID=your_key
 export AWS_SECRET_ACCESS_KEY=your_secret
@@ -114,7 +115,6 @@ Open `http://localhost:8000`
 ---
 
 ## Running with Docker
-
 ```bash
 docker build --platform linux/amd64 -t song-recommender .
 docker run -p 8000:8000 \
@@ -141,9 +141,9 @@ Response:
 {
   "mood": "I feel nostalgic and happy",
   "recommendations": [
-    { "song": "Holy Ground", "album": "Red", "score": 0.522 },
-    { "song": "Fifteen", "album": "Fearless", "score": 0.498 },
-    { "song": "The Best Day", "album": "Taylor Swift", "score": 0.444 }
+    { "song": "Holy Ground", "album": "Red", "score": 0.8 },
+    { "song": "Fifteen", "album": "Fearless", "score": 0.7 },
+    { "song": "The Best Day", "album": "Taylor Swift", "score": 0.6 }
   ]
 }
 ```
@@ -153,15 +153,16 @@ Response:
 ## Limitations
 
 - Dataset is 147 songs — small corpus means the 3rd recommendation is sometimes weak
-- Phi-3 summaries occasionally hallucinate details not in the lyrics, especially for shorter songs
-- Model was not fine-tuned on lyrics data — performance ceiling is set by the pretrained Qwen3 model
+- Mood fields were generated by Gemini — occasional inaccuracies in emotional labeling can affect results
+- Neither model was fine-tuned on this data — performance ceiling is set by pretrained weights
 
 ---
 
 ## What I Learned
 
 - Why general-purpose embedding models struggle with poetic/lyrical text (domain gap)
-- How summarization-augmented retrieval bridges that gap
+- How LLM-generated structured metadata can be a cleaner signal than raw lyrics or generated summaries
+- Bi-encoder + cross-encoder reranking for better semantic search
 - FastAPI for building ML inference APIs
 - Docker multi-platform builds (ARM vs AMD64)
 - AWS EC2, S3, and GHCR for deployment
