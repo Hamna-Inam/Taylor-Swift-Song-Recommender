@@ -2,7 +2,8 @@
 
 A mood-based song recommender that takes how you're feeling and finds the Taylor Swift song that matches. Built as a learning project covering NLP, API development, and cloud deployment.
 
-<img width="1280" height="800" alt="Screenshot 2026-03-17 at 1 17 53 am" src="https://github.com/user-attachments/assets/56d33230-9a2f-4abc-89fb-7c5024fdad30" />
+<img width="1203" height="672" alt="image" src="https://github.com/user-attachments/assets/3fe860ff-f68d-4743-92d2-d8a9a290d3c0" />
+
 
 
 ---
